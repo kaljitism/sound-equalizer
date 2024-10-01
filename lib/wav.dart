@@ -8,7 +8,17 @@ void main() async {
   print('format: ${wav.format}');
   print('chunkID: ${wav.chunkId}');
   print('chunkSize: ${wav.chunkSize}');
-  print('fmtChunk: ${String.fromCharCodes(openedFile.readSync(4))}');
+  print('subChunk1: ${wav.subChunk1ID}');
+  print('subChunk1: ${wav.subChunk1Size}');
+  print('audioFormat: ${wav.audioFormat}');
+  print('numChannels: ${wav.numChannels}');
+  print('sampleRate: ${wav.sampleRate}');
+  print('byteRate: ${wav.byteRate}');
+  print('blockAlign: ${wav.blockAlign}');
+  print('bitsPer: ${wav.bitsPerSample}');
+  print('extraParam: ${wav.extraParamSize}');
+  print('subChunk2: ${wav.subChunk2ID}');
+  print('subChunk2: ${wav.subChunk2Size}');
 }
 
 class WavFile {
