@@ -11,10 +11,6 @@ void main() {
       RandomAccessFile openedFile = file.openSync();
       WavFile wav = WavFile(openedFile);
 
-      late final String chunkId;
-      late final int chunkSize;
-      late final String format;
-
       expect(wav.chunkId, equals('RIFF'));
       expect(wav.chunkSize.runtimeType, equals(int));
       expect(wav.format, equals('WAVE'));
