@@ -1,24 +1,64 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-void main() async {
+void main() {
   File file = File('../examples/mozart.wav');
   RandomAccessFile openedFile = file.openSync();
   WavFile wav = WavFile(openedFile);
-  print('format: ${wav.format}');
-  print('chunkID: ${wav.chunkId}');
-  print('chunkSize: ${wav.chunkSize}');
-  print('subChunk1: ${wav.subChunk1ID}');
-  print('subChunk1: ${wav.subChunk1Size}');
-  print('audioFormat: ${wav.audioFormat}');
-  print('numChannels: ${wav.numChannels}');
-  print('sampleRate: ${wav.sampleRate}');
-  print('byteRate: ${wav.byteRate}');
-  print('blockAlign: ${wav.blockAlign}');
-  print('bitsPer: ${wav.bitsPerSample}');
-  print('extraParam: ${wav.extraParamSize}');
-  print('subChunk2: ${wav.subChunk2ID}');
-  print('subChunk2: ${wav.subChunk2Size}');
+  print(wav);
+}
+
+class RiffChunk {
+  late final int offset;
+  late final String id;
+  late final int size;
+
+  RiffChunk({
+    required this.offset,
+    required this.id,
+    required this.size,
+  });
+}
+
+class RiffParser {
+  RiffParser(this._bytes);
+
+  final RandomAccessFile _bytes;
+  int bytesRead = 0;
+
+  int readInt16() {
+    bytesRead += 2;
+    return _bytes.readSync(2).buffer.asByteData().getInt16(0, Endian.little);
+  }
+
+  int readInt32() {
+    bytesRead += 4;
+    return _bytes.readSync(4).buffer.asByteData().getInt32(0, Endian.little);
+  }
+
+  String readString() {
+    bytesRead += 4;
+    return String.fromCharCodes(_bytes.readSync(4));
+  }
+
+  void seekToAfter(RiffChunk chunk) {
+    int nextChunkOffset = chunk.offset + chunk.size;
+    _bytes.setPositionSync(nextChunkOffset);
+  }
+
+  RiffChunk readChunkHeader() {
+    int offset = _bytes.positionSync();
+    String id = readString();
+    int size = readInt32();
+
+    return RiffChunk(
+      offset: offset,
+      id: id,
+      size: size,
+    );
+  }
+
+  // RiffChunk firstChild() {}
 }
 
 class WavFile {
@@ -44,28 +84,60 @@ class WavFile {
   late dynamic data;
 
   WavFile(RandomAccessFile bytes) {
-    chunkId = String.fromCharCodes(bytes.readSync(4));
-    chunkSize =
-        bytes.readSync(4).buffer.asByteData().getInt32(0, Endian.little);
-    format = String.fromCharCodes(bytes.readSync(4));
-    bytes.setPosition(16);
-    subChunk1ID = String.fromCharCodes(bytes.readSync(4));
-    subChunk1Size = bytes.readSync(4).buffer.asByteData().getInt32(0);
-    audioFormat = bytes.readSync(2).buffer.asByteData().getInt32(0);
-    numChannels = bytes.readSync(2).buffer.asByteData().getInt32(0);
-    sampleRate = bytes.readSync(4).buffer.asByteData().getInt32(0);
-    byteRate = bytes.readSync(4).buffer.asByteData().getInt32(0);
-    blockAlign = bytes.readSync(2).buffer.asByteData().getInt32(0);
-    bitsPerSample = bytes.readSync(2).buffer.asByteData().getInt32(0);
+    final parser = RiffParser(bytes);
+    RiffChunk riffChunkRoot = parser.readChunkHeader();
+
+    chunkId = riffChunkRoot.id;
+    chunkSize = riffChunkRoot.size;
+    format = parser.readString();
+
+    // Riff is a nested tree structure, we don't seek the end
+    // of the chunk here since the remaining chunks are still
+    // 'inside' this 'root' chunk
+
+    // Format Chunk
+    RiffChunk formatChunk = parser.readChunkHeader();
+
+    subChunk1ID = formatChunk.id;
+    subChunk1Size = formatChunk.size;
+    audioFormat = parser.readInt16();
+    numChannels = parser.readInt16();
+    sampleRate = parser.readInt32();
+    byteRate = parser.readInt32();
+    blockAlign = parser.readInt16();
+    bitsPerSample = parser.readInt16();
+
+    parser.seekToAfter(formatChunk);
 
     if (subChunk1Size == 16) {
-      bytes.setPosition(36);
+      bytes.setPositionSync(36);
+      parser.bytesRead = 36;
     } else {
-      extraParamSize = bytes.readSync(2).buffer.asByteData().getInt32(0);
-      bytes.setPosition(16 + extraParamSize);
+      extraParamSize = parser.readInt16();
+      bytes.setPositionSync(34 + 2 + extraParamSize);
+      parser.bytesRead = 34 + 2 + extraParamSize;
     }
 
-    subChunk1ID = String.fromCharCodes(bytes.readSync(4));
-    subChunk1Size = bytes.readSync(4).buffer.asByteData().getInt32(0);
+    subChunk2ID = parser.readString();
+    subChunk2Size = parser.readInt32();
+  }
+
+  @override
+  String toString() {
+    return ''
+        'format: $format\n'
+        'chunkID: $chunkId\n'
+        'chunkSize: $chunkSize\n'
+        'subChunk1ID: $subChunk1ID\n'
+        'subChunk1Size: $subChunk1Size\n'
+        'audioFormat: $audioFormat\n'
+        'numChannels: $numChannels\n'
+        'sampleRate: $sampleRate\n'
+        'byteRate: $byteRate\n'
+        'blockAlign: $blockAlign\n'
+        'bitsPerSample: $bitsPerSample\n'
+        'extraParamSize: $extraParamSize\n'
+        'subChunk2ID: $subChunk2ID\n'
+        'subChunk2Size: $subChunk2Size';
   }
 }
