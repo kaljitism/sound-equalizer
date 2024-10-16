@@ -5,7 +5,18 @@ void main() {
   File file = File('../examples/mozart.wav');
   RandomAccessFile openedFile = file.openSync();
   WavFile wav = WavFile(openedFile);
-  print(wav);
+  print('$wav\n');
+  var samples = Uint8List(8);
+  int sampleCount = wav.readSamples(samples.buffer.asUint16List());
+  print('sampleCount: $sampleCount');
+  print('sample[0]: ${samples[0]}');
+  print('sample[1]: ${samples[1]}');
+  print('sample[2]: ${samples[2]}');
+  print('sample[3]: ${samples[3]}');
+  print('sample[4]: ${samples[4]}');
+  print('sample[5]: ${samples[5]}');
+  print('sample[6]: ${samples[6]}');
+  print('sample[7]: ${samples[7]}');
 }
 
 class RiffChunk {
@@ -41,11 +52,6 @@ class RiffParser {
     return String.fromCharCodes(_bytes.readSync(4));
   }
 
-  void seekToAfter(RiffChunk chunk) {
-    int nextChunkOffset = chunk.offset + chunk.size;
-    _bytes.setPositionSync(nextChunkOffset);
-  }
-
   RiffChunk readChunkHeader() {
     int offset = _bytes.positionSync();
     String id = readString();
@@ -58,10 +64,22 @@ class RiffParser {
     );
   }
 
-  // RiffChunk firstChild() {}
+  void seekToAfter(RiffChunk chunk) {
+    int nextChunkOffset = chunk.offset + chunk.size;
+    _bytes.setPositionSync(nextChunkOffset);
+  }
+
+  // Returns the number of samples.
+  int readInto(Uint16List samples) {
+    double bytesRead = _bytes.readIntoSync(samples.buffer.asUint8List()) / 2;
+    return bytesRead ~/ 2;
+  }
 }
 
 class WavFile {
+  // The mighty parser
+  late final RiffParser parser;
+
   // Wav Header
   late String chunkId;
   late int chunkSize;
@@ -84,16 +102,14 @@ class WavFile {
   late dynamic data;
 
   WavFile(RandomAccessFile bytes) {
-    final parser = RiffParser(bytes);
+    parser = RiffParser(bytes);
+
+    // Root Chunk
     RiffChunk riffChunkRoot = parser.readChunkHeader();
 
     chunkId = riffChunkRoot.id;
     chunkSize = riffChunkRoot.size;
     format = parser.readString();
-
-    // Riff is a nested tree structure, we don't seek the end
-    // of the chunk here since the remaining chunks are still
-    // 'inside' this 'root' chunk
 
     // Format Chunk
     RiffChunk formatChunk = parser.readChunkHeader();
@@ -107,19 +123,17 @@ class WavFile {
     blockAlign = parser.readInt16();
     bitsPerSample = parser.readInt16();
 
+    assert(bitsPerSample == 16);
     parser.seekToAfter(formatChunk);
 
-    if (subChunk1Size == 16) {
-      bytes.setPositionSync(36);
-      parser.bytesRead = 36;
-    } else {
-      extraParamSize = parser.readInt16();
-      bytes.setPositionSync(34 + 2 + extraParamSize);
-      parser.bytesRead = 34 + 2 + extraParamSize;
-    }
+    // Data Chunk
+    RiffChunk dataChunk = parser.readChunkHeader();
+    subChunk2ID = dataChunk.id;
+    subChunk2Size = dataChunk.size;
+  }
 
-    subChunk2ID = parser.readString();
-    subChunk2Size = parser.readInt32();
+  int readSamples(Uint16List samples) {
+    return parser.readInto(samples);
   }
 
   @override
